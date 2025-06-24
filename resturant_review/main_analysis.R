@@ -6,6 +6,10 @@ library(caret)
 library(ggplot2)
 library(wordcloud2)
 
+# Clear workspace and garbage collect to free memory
+rm(list = ls())
+gc()
+
 # Read the dataset with proper encoding
 Data <- read_csv("converttsv-Resturant-R.csv", locale = locale(encoding = "Latin1"))
 
@@ -37,6 +41,9 @@ corpus <- Corpus(VectorSource(Data$Review))
 # Generate the term-document matrix
 tdm <- TermDocumentMatrix(corpus, control = list(wordLengths = c(1, Inf)))
 
+# Adjust sparsity threshold to keep more terms
+tdm <- removeSparseTerms(tdm, sparse = 0.99)  # Keep more terms than before
+
 # Convert to TF-IDF matrix and transpose it
 tfidf <- weightTfIdf(tdm)
 tfidf_df <- as.data.frame(t(as.matrix(tfidf)))
@@ -54,8 +61,10 @@ split <- sample(1:nrow(tfidf_df), 0.8 * nrow(tfidf_df))
 train <- tfidf_df[split, ]
 test <- tfidf_df[-split, ]
 
-# Train logistic regression model
-model <- glm(Liked ~ ., data = train, family = "binomial")
+# Train logistic regression model (can take time if matrix is still large)
+system.time({
+  model <- glm(Liked ~ ., data = train, family = "binomial")
+})
 
 # Predict on test set
 preds <- predict(model, newdata = test, type = "response")
@@ -64,12 +73,12 @@ pred_classes <- ifelse(preds > 0.5, 1, 0)
 # Evaluate with confusion matrix
 confusionMatrix(factor(pred_classes, levels = c(0, 1)), test$Liked)
 
-# Word frequency analysis
+# Word frequency analysis (top 25 most frequent words)
 term_freq <- rowSums(as.matrix(tdm))
 df <- data.frame(term = names(term_freq), freq = term_freq)
-top_terms <- df %>% filter(freq > 20) %>% arrange(desc(freq)) %>% head(25)
+top_terms <- df %>% arrange(desc(freq)) %>% head(25)
 
-# Bar chart of most frequent terms
+# Bar chart of top 25 most frequent terms
 ggplot(top_terms, aes(x = reorder(term, freq), y = freq)) +
   geom_col(fill = "steelblue") +
   coord_flip() +
